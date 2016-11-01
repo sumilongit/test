@@ -1,0 +1,18 @@
+  var aData = oTable.fnGetData(this);
+        var aPos = oTable.fnGetPosition(this);
+        $("#hidDTSelectedRow").val(aPos);
+
+
+
+
+
+
+
+
+
+
+
+
+
+  var rowPos=$("#hidDTSelectedRow").val();
+        var aData = oTable.fnGetData(rowPos); // get datarow
