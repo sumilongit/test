@@ -1,0 +1,76 @@
+select  
+(fn_getfacilityname_agr(string_agg(cast(locat as text), ','))).facname fac_name,
+(fn_getfacilityname_agr(string_agg(cast(locat as text), ','))).faccode fac_code,
+eqpid,
+fn_getequipmentname(eqpid) Equipment_Name, 
+fn_getequipmentcode(eqpid) Equipment_Code, 
+fn_splitonofftime(string_agg(cast(eqoftg_onoffdate as text), ',') , string_agg(eqoftg_onofftime, ',')) offon_Time, 
+string_agg(usrName, ','),
+sum(ontime) LostHrs 
+from
+( 
+select row_number() OVER (ORDER BY eqpid, eqoftg_onoffdate, eqoftg_onofftime) AS rownum, * from 
+(
+select 0 eqoftg_id, eqpgi_eqpm_id eqpid, to_date(to_char(eqpgi_installdates, 'YYYY-MM-DD'), 'YYYY-MM-DD') eqoftg_onoffdate, 
+ to_char(eqpgi_installdates, 'HH24:MI') eqoftg_onofftime, 0 as ontime, 0 as offtime, 
+ fn_getusername(eqpgi_createduser_id) as usrName,0 locat, true as stat
+ from equipmentgenerelinfo
+where eqpgi_eqpm_id in (select eqoftg_eqpm_id 
+from equipmentonofftoggel
+ left join workordermaster on eqoftg_worm_id = worm_id
+where eqoftg_onoffstatus = true and upper(eqoftg_reason) = upper('UnScheduled')
+--and eqoftg_onoffdate >= to_date('01-Sep-2016', 'DD-MON-YYYY')  
+    --  and eqoftg_onoffdate <= to_date('22-Sep-2016', 'DD-MON-YYYY')  
+   --and eqoftg_eqpm_id = 477
+ ) 
+union
+select eqoftg_id, eqoftg_eqpm_id eqpid, eqoftg_onoffdate, eqoftg_onofftime, 
+ 0 as ontime, cast(fn_get_tbf_time_hrs(eqoftg_id, 'UnScheduled') as numeric) as offtime, 
+fn_getusername(eqoftg_user_id) as usrName, eqpgi_atlocation as locat, true as stat
+from equipmentonofftoggel
+ inner join equipmentgenerelinfo on eqpgi_eqpm_id = eqoftg_eqpm_id
+ left join workordermaster on eqoftg_worm_id = worm_id
+ left join workorderparts on worprt_worm_id = eqoftg_worm_id
+where eqoftg_onoffstatus = true and upper(eqoftg_reason) = upper('UnScheduled')
+--and eqoftg_onoffdate >= to_date('01-Sep-2016', 'DD-MON-YYYY')  
+    --  and eqoftg_onoffdate <= to_date('22-Sep-2016', 'DD-MON-YYYY')  
+   -- and eqoftg_eqpm_id = 477
+order by eqpid, eqoftg_onoffdate, eqoftg_onofftime    
+) ondata
+--where  ontime != 0
+union
+select row_number() OVER (ORDER BY eqpid, eqoftg_onoffdate, eqoftg_onofftime) AS rownum, * from 
+(
+select 0 eqoftg_id, eqpgi_eqpm_id eqpid, to_date(to_char(CURRENT_DATE + INTERVAL '10 day', 'YYYY-MM-DD'), 'YYYY-MM-DD') eqoftg_onoffdate, 
+ to_char(CURRENT_DATE + INTERVAL '10 day', 'HH24:MI') eqoftg_onofftime, 0 as ontime, 0 as offtime, 
+ fn_getusername(eqpgi_createduser_id) as usrName,0 locat, false as stat
+ from equipmentgenerelinfo
+where eqpgi_eqpm_id in (select eqoftg_eqpm_id
+from equipmentonofftoggel
+  left join  workordermaster on eqoftg_worm_id = worm_id
+where eqoftg_onoffstatus = false and upper(eqoftg_reason) = upper('UnScheduled')
+ --and eqoftg_onoffdate >= to_date('01-Sep-2016', 'DD-MON-YYYY')  
+ --and eqoftg_onoffdate <= to_date('22-Sep-2016', 'DD-MON-YYYY')  
+ --and eqoftg_eqpm_id = 477
+ )
+union 
+select eqoftg_id, eqoftg_eqpm_id eqpid, eqoftg_onoffdate, eqoftg_onofftime, 
+  cast(fn_get_tbf_time_hrs(eqoftg_id, 'UnScheduled') as numeric) as ontime, 0 as offtime,
+fn_getusername(eqoftg_user_id) as usrName, eqpgi_atlocation as locat, false stat
+from equipmentonofftoggel
+  inner join equipmentgenerelinfo on eqpgi_eqpm_id = eqoftg_eqpm_id
+  left join  workordermaster on eqoftg_worm_id = worm_id
+where eqoftg_onoffstatus = false and upper(eqoftg_reason) = upper('UnScheduled')
+ --and eqoftg_onoffdate >= to_date('01-Sep-2016', 'DD-MON-YYYY')  
+ --and eqoftg_onoffdate <= to_date('22-Sep-2016', 'DD-MON-YYYY')  
+ --and eqoftg_eqpm_id = 477
+order by eqpid, eqoftg_onoffdate, eqoftg_onofftime
+) ofdata
+--where  eqpid = 165
+order by rownum, eqpid, eqoftg_onoffdate, eqoftg_onofftime
+--order by eqoftg_onoffdate, eqoftg_onofftime
+--order by eqoftg_eqpm_id, eqoftg_onoffdate, eqoftg_onofftime
+) tttt
+
+group by  rownum, eqpid 
+order by offon_Time
